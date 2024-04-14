@@ -61,6 +61,14 @@ from com.badlogic.gdx.scenes.scene2d.utils import ClickListener,TextureRegionDra
 
 @JImplements(ApplicationListener)# Jpype的包装器，实现libgdx的接口
 class Pet:
+    def PygameLoop(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.PygameRunning=False
+        
+        self.PygameScreen.fill((255,255,255))
+        pygame.display.update()
+
     def Buttons(self):
         if self.RightClik:
             self.SkinTexture.draw(self.Textbatch,1)
@@ -68,7 +76,7 @@ class Pet:
             self.SetingTexture.draw(self.Textbatch,1)
             self.ExitTexture.draw(self.Textbatch,1)
             if Gdx.input.isTouched() and 260<Gdx.input.getX()<285 and 118<Gdx.input.getY()<143:
-                print("skin")
+                self.PygameRunning=True
                 self.RightClik=False
             if Gdx.input.isTouched() and 260<Gdx.input.getX()<285 and 149<Gdx.input.getY()<173:
                 print("Chat")
@@ -320,7 +328,9 @@ class Pet:
         self.ExitTexture=Image(Texture(Gdx.files.internal("./assets/exit.png")))
         self.ExitTexture.setPosition(260,58)
 
-        self.PygameScreen=pygame.display.set_mode((500,400))
+        self.PygameRunning=False
+        self.PygameScreen=None
+
 
         # 绘制文字设置
         self.Font=FreeTypeFontGenerator(Gdx.files.internal("./Font/simhei.ttf"))
@@ -366,6 +376,15 @@ class Pet:
         self.Rand=randint(0,10000)
         self.Soapon=FindWindow(None,"Soap")
 
+        if self.PygameRunning and self.PygameScreen==None:
+            self.PygameScreen=pygame.display.set_mode((500,400))
+            pygame.display.set_caption("Test Window")
+        if not self.PygameRunning and self.PygameScreen!=None:
+            self.PygameScreen=None
+            pygame.quit()
+        if self.PygameRunning and self.PygameScreen!=None:
+            self.PygameLoop()
+        
         ScreenUtils.clear(0, 0, 0, 0)
 
         self.Check_State(self.NState)
