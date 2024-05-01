@@ -2,33 +2,40 @@ import jpype.imports
 import pygame
 from jpype import JImplements, JOverride
 from random import randint
-from os import getcwd,listdir,system
+from os import getcwd,listdir,system,environ
 from sys import argv,exit
-from win32gui import FindWindow,SetWindowPos,GetWindowRect,SetForegroundWindow,GetDC
-from win32print import GetDeviceCaps
-from win32con import HWND_TOPMOST,SWP_SHOWWINDOW,WS_EX_LAYERED,WS_EX_TRANSPARENT,GWL_EXSTYLE,LWA_ALPHA,DESKTOPHORZRES,DESKTOPVERTRES
 from threading import Timer,Thread
 from time import strftime
 from zipimport import zipimporter
 from pygame import mixer
 from pygame import *
-from win32api import SetWindowLong,GetWindowLong
+from json import loads
+
 
 ExtraFunc=zipimporter("ExtraFunc.zip")
 Soap=ExtraFunc.load_module("SoapSystem")
 PopWindow=ExtraFunc.load_module("PopWindow")
+KAICore=ExtraFunc.load_module("KAICore")
 ModleName=argv[1]+"/"
 Modle_Atlas="Modle/"+ModleName+argv[2]
 Modle_Json="Modle/"+ModleName+argv[3]
 
+BaseJar=['./Jars/gdx-backend-lwjgl3-1.11.0.jar','./Jars/gdx-1.11.0.jar','./Jars/lwjgl-glfw-3.3.1.jar','./Jars/lwjgl-3.3.1.jar','./Jars/gdx-jnigen-loader-2.3.1.jar','./Jars/gdx-platform-1.11.0-natives-desktop.jar','./Jars/lwjgl-opengl-3.3.1.jar','./Jars/lwjgl-openal-3.3.1.jar','./Jars/Spine-GDX.jar','./Jars/gdx-freetype-1.11.0.jar','./Jars/gdx-freetype-platform-1.11.0-natives-desktop.jar']
 # 定义Jar文件列表，不同平台需要不同的natives文件，待添加Winodws、MacOS
-Windows=['./Jars/gdx-backend-lwjgl3-1.11.0.jar','./Jars/gdx-1.11.0.jar','./Jars/lwjgl-glfw-3.3.1.jar','./Jars/lwjgl-3.3.1.jar','./Jars/gdx-jnigen-loader-2.3.1.jar','./Jars/gdx-platform-1.11.0-natives-desktop.jar',
-           './Jars/lwjgl-3.3.1-natives-windows.jar','./Jars/lwjgl-glfw-3.3.1-natives-windows.jar','./Jars/lwjgl-opengl-3.3.1.jar','./Jars/lwjgl-opengl-3.3.1-natives-windows.jar','./Jars/lwjgl-openal-3.3.1.jar',
-           './Jars/lwjgl-openal-3.3.1-natives-windows.jar','./Jars/Spine-GDX.jar','./Jars/gdx-freetype-1.11.0.jar','./Jars/gdx-freetype-platform-1.11.0-natives-desktop.jar']
+Windows=['./Jars/lwjgl-3.3.1-natives-windows.jar','./Jars/lwjgl-glfw-3.3.1-natives-windows.jar','./Jars/lwjgl-opengl-3.3.1-natives-windows.jar','./Jars/lwjgl-openal-3.3.1-natives-windows.jar']
+Linux=['./Jars/lwjgl-3.3.3-natives-linux.jar','./jars/lwjgl-glfw-3.3.3-natives-linux.jar','./Jars/lwjgl-openal-3.3.3-natives-linux.jar','./Jar/lwjgl-opengl-3.3.3-natives-linux.jar']
 PLATFORM=Windows
-jpype.startJVM(classpath=PLATFORM)  # 启动JVM
+if PLATFORM==Windows:
+    from win32api import SetWindowLong,GetWindowLong
+    from win32gui import FindWindow,SetWindowPos,GetWindowRect,SetForegroundWindow,GetDC
+    from win32print import GetDeviceCaps
+    from win32con import HWND_TOPMOST,SWP_SHOWWINDOW,WS_EX_LAYERED,WS_EX_TRANSPARENT,GWL_EXSTYLE,LWA_ALPHA,DESKTOPHORZRES,DESKTOPVERTRES
+elif PLATFORM==Linux:
+    ...# 留空给后续linux窗口相关
+jpype.startJVM(classpath=PLATFORM+BaseJar)  # 启动JVM
 
 pygame.init()
+environ["SDL_IME_SHOW_UI"] = "1"
 mixer.init()# 初始化音频播放，由于结构设计或是jpype的问题，GDX的音频无法使用
 
 # 引入相关Jar包 下面那些注释不能删，删了报错。
@@ -65,8 +72,28 @@ class Pet:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.PygameRunning=False
-        
+            if event.type==pygame.TEXTINPUT:
+                self.KAIInput+=event.text
+            if event.type==pygame.KEYDOWN and event.key==pygame.K_BACKSPACE:
+                a=list(self.KAIInput)
+                del a[-1]
+                self.KAIInput="".join(a)
+            if event.type==pygame.KEYDOWN and event.key==pygame.K_RETURN:
+                if type(self.KAIAnswer)==tuple:
+                    self.KAIAnswer=KAICore.IF_Core(self.KAIInput,"ALL",NowEvent=self.KAIAnswer[1],Now_EventTime=self.KAIAnswer[2],Weader_Data=self.WeatherData)
+                else:
+                    self.KAIAnswer=KAICore.IF_Core(self.KAIInput,None,Weader_Data=self.WeatherData)
+                self.KAIInput=""
+                try:
+                    if type(self.KAIAnswer)==tuple:
+                        self.SoapSpawn(self.KAIAnswer[0],len(self.KAIAnswer[0]),None)
+                    else:self.SoapSpawn(self.KAIAnswer,len(self.KAIAnswer),None)
+                except:
+                    self.SoapSpawn("你在说什么？",5,None)
         self.PygameScreen.fill((255,255,255))
+        if self.PygameRunning=="Chat":
+            text = self.font.render(self.KAIInput, True, (0, 0, 0))
+            self.PygameScreen.blit(text,(0,20))
         pygame.display.update()
 
     def Buttons(self):
@@ -76,10 +103,10 @@ class Pet:
             self.SetingTexture.draw(self.Textbatch,1)
             self.ExitTexture.draw(self.Textbatch,1)
             if Gdx.input.isTouched() and 260<Gdx.input.getX()<285 and 118<Gdx.input.getY()<143:
-                self.PygameRunning=True
+                self.PygameRunning="Skin"
                 self.RightClik=False
             if Gdx.input.isTouched() and 260<Gdx.input.getX()<285 and 149<Gdx.input.getY()<173:
-                print("Chat")
+                self.PygameRunning="Chat"
                 self.RightClik=False
             if Gdx.input.isTouched() and 260 < Gdx.input.getX() < 285 and 189<Gdx.input.getY()<213:
                 print("settings")
@@ -106,9 +133,10 @@ class Pet:
             self.TouchBak=self.SoapBak_Large
             self.TextY+=15
         Timer(time,self.DelSoap).start()
-        Audio=mixer.Sound(audio)
-        Audio.set_volume(0.5)
-        Audio.play()
+        if audio!= None:
+            Audio=mixer.Sound(audio)
+            Audio.set_volume(0.5)
+            Audio.play()
 
     def ExtraLoop(self):# 放置一些需要时间且需要循环检测的操作，CheckMail会严重拖慢主循环
         while True:
@@ -328,16 +356,20 @@ class Pet:
         self.ExitTexture=Image(Texture(Gdx.files.internal("./assets/exit.png")))
         self.ExitTexture.setPosition(260,58)
 
-        self.PygameRunning=False
+        # 右键菜单窗口相关变量
+        self.PygameRunning="Un"
         self.PygameScreen=None
-
+        self.KAIInput=""
+        self.KAIAnswer=None
+        self.font=pygame.font.Font('Font/simhei.ttf', 18)
+        self.WeatherData=loads(KAICore.GetWeather(loads(open("Settings.json",'r',encoding="utf-8").read())["Weather"]["City"]))
 
         # 绘制文字设置
         self.Font=FreeTypeFontGenerator(Gdx.files.internal("./Font/simhei.ttf"))
         self.Font_paramer=self.Font.FreeTypeFontParameter()
         self.Font_paramer.size=13
         self.Font_paramer.color=Color.WHITE
-        self.Font_paramer.characters="你似乎更加适应自己的工作和职责了，像一个领导者。越是强大脆弱这就万物道理在做什么？会定期为进行学检查记录生命征象与意识状态其他人没有权限任何想对步都拒绝明白吗质疑存义博士我地上十分顽它们演化着位置后天驯抗往只徒劳归宿方答案能样坚持好,"
+        self.Font_paramer.characters= open("./ChWord.txt","r",encoding="utf-8").read()
         self.Font_Draw=self.Font.generateFont(self.Font_paramer)
         self.Font.dispose()
 
@@ -376,13 +408,16 @@ class Pet:
         self.Rand=randint(0,10000)
         self.Soapon=FindWindow(None,"Soap")
 
-        if self.PygameRunning and self.PygameScreen==None:
-            self.PygameScreen=pygame.display.set_mode((500,400))
-            pygame.display.set_caption("Test Window")
-        if not self.PygameRunning and self.PygameScreen!=None:
+        if self.PygameRunning!="Un" and self.PygameScreen==None:
+            if self.PygameRunning=="Skin":
+                self.PygameScreen=pygame.display.set_mode((500,400))
+                pygame.display.set_caption("Skin Window")
+            elif self.PygameRunning=="Chat":
+                self.PygameScreen=pygame.display.set_mode((590,64))
+        if self.PygameRunning=="Un" and self.PygameScreen!=None:
             self.PygameScreen=None
             pygame.quit()
-        if self.PygameRunning and self.PygameScreen!=None:
+        if self.PygameRunning!="Un" and self.PygameScreen!=None:
             self.PygameLoop()
         
         ScreenUtils.clear(0, 0, 0, 0)
