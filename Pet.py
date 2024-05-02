@@ -6,6 +6,7 @@ from os import getcwd,listdir,system,environ
 from sys import argv,exit
 from threading import Timer,Thread
 from time import strftime
+from zhdate import ZhDate as L_Date
 from zipimport import zipimporter
 from pygame import mixer
 from pygame import *
@@ -96,6 +97,19 @@ class Pet:
             self.PygameScreen.blit(text,(0,20))
         pygame.display.update()
 
+    def Check_Festival(self):
+        DBF=str(L_Date(int(strftime("%Y")),5,5).to_datetime()).replace(" 00:00:00","").replace("-","")#端午节时间
+        SF=str(L_Date(int(strftime("%Y")),1,1).to_datetime()).replace(" 00:00:00","").replace("-","")# 春节时间
+        ChristmasDay=strftime("%Y")+"1215"
+        Labor=strftime("%Y")+"0501"
+        National=strftime("%Y")+"1001"
+        Festival_L=[DBF,SF,ChristmasDay,Labor,National]
+        Festival_D={0: "端午节",1: "新年",2:"圣诞节",3:"劳动节",4:"国庆节"}
+        if strftime("%Y%m%d") in Festival_L:
+            return Festival_D[Festival_L.index(strftime("%Y%m%d"))]
+        else:
+            return False
+
     def Buttons(self):
         if self.RightClik:
             self.SkinTexture.draw(self.Textbatch,1)
@@ -129,9 +143,11 @@ class Pet:
         self.text=text
         self.TextY=85
         if len(self.cut(text,25))>=3:
-            self.text="\n".join(self.cut(text))
+            self.text="\n".join(self.cut(text,25))
             self.TouchBak=self.SoapBak_Large
             self.TextY+=15
+        elif len(self.cut(text,25))==2:
+            self.text="\n".join(self.cut(text,25))
         Timer(time,self.DelSoap).start()
         if audio!= None:
             Audio=mixer.Sound(audio)
@@ -141,7 +157,7 @@ class Pet:
     def ExtraLoop(self):# 放置一些需要时间且需要循环检测的操作，CheckMail会严重拖慢主循环
         while True:
             if PopWindow.Check_Mail() and not self.WindowPoped:
-                self.WindowPoped=False
+                self.WindowPoped=True
                 system("python PopWindow.pyw")
                 Timer(60,self.WinPop).start()
     def WinPop(self):
@@ -238,6 +254,13 @@ class Pet:
         if self.NState=="RELAX" and 230000<= self.Time <= 235959:
             self.NState="SLEEP"
             self.state.setAnimation(0,"Sleep",True)
+            if "雨" in self.WeatherData["T_Weather"] or "雪" in self.WeatherData["T_Weather"] and not self.RemindWeather:
+                self.RemindWeather=True
+                if "雨" in self.WeatherData["T_Weather"]:
+                    self.SoapSpawn("明天可能要下雨，出门记得带伞。",6,None)
+                if "雪" in self.WeatherData["T_Weather"]:
+                    self.SoapSpawn("明天可能要下雪，记得多穿些衣服。",6,None)
+
         if self.NState!="SLEEP" and 0<=self.Time<60000:
             self.NState="SLEEP"
             self.state.setAnimation(0,"Sleep",True)
@@ -248,6 +271,8 @@ class Pet:
         # 右键菜单
         if Gdx.input.isTouched() and Gdx.input.isButtonPressed(Input.Buttons.RIGHT) and 102<Gdx.input.getX()<140 and 201<Gdx.input.getY()<289 and self.NState=="RELAX":
             self.RightClik=True
+        if self.NState=="RELAX" and self.TalkRand=="23250722":
+            self.SoapSpawn(self.SelfTalk,int(len(self.SelfTalk)/2),None)
 
     @JOverride
     def resize(self, width, height):
@@ -338,6 +363,10 @@ class Pet:
         self.Soapon=self.ThreadStart=0
         self.WindowPoped=False
         self.ClickTime=0
+        self.Settings=loads(open("Settings.json",'r',encoding="utf-8").read())
+        self.City=self.Settings["Weather"]["City"]
+        self.TalkRand=randint(0,2147483647)
+        self.RemindWeather=False
 
         # 加载气泡背景
         self.SoapBak=Image(Texture("./assets/VOICE.png"))
@@ -362,14 +391,14 @@ class Pet:
         self.KAIInput=""
         self.KAIAnswer=None
         self.font=pygame.font.Font('Font/simhei.ttf', 18)
-        self.WeatherData=loads(KAICore.GetWeather(loads(open("Settings.json",'r',encoding="utf-8").read())["Weather"]["City"]))
+        self.WeatherData=loads(KAICore.GetWeather(self.City))
 
         # 绘制文字设置
         self.Font=FreeTypeFontGenerator(Gdx.files.internal("./Font/simhei.ttf"))
         self.Font_paramer=self.Font.FreeTypeFontParameter()
         self.Font_paramer.size=13
         self.Font_paramer.color=Color.WHITE
-        self.Font_paramer.characters= open("./ChWord.txt","r",encoding="utf-8").read()
+        self.Font_paramer.characters= open("./ChWord.txt","r",encoding="utf-8").read()+",.，。\"\':!?？！"
         self.Font_Draw=self.Font.generateFont(self.Font_paramer)
         self.Font.dispose()
 
@@ -399,13 +428,70 @@ class Pet:
         SetWindowPos(self.WinPID,HWND_TOPMOST,10,self.WinRect[1],380,300,SWP_SHOWWINDOW)
         SetWindowLong(self.WinPID, GWL_EXSTYLE,GetWindowLong(self.WinPID, GWL_EXSTYLE) | WS_EX_LAYERED)
 
+        #初次见面的天气提醒与节日祝福
+        self.Greeting=self.FestivalGreeting=self.To_Weather=None
+        if strftime("%m%d")==self.Settings["Birth"]:
+            self.Birth=True
+        else:self.Birth=False
+        try:
+            if "雪" in self.WeatherData["Weather"]:
+                self.To_Weather="S"
+            elif "雨" in self.WeatherData["Weather"]:
+                self.To_Weather="R"
+            else:
+                self.To_Weather=None
+        except Exception as E:
+            print("Weather Error:%s"%E)
+        if self.Check_Festival!=False:
+            self.Festival=self.Check_Festival()
+            if self.Festival=="端午节":
+                self.FestivalGreeting="端午节快乐，博士。"
+            elif self.Festival=="新年":
+                self.FestivalGreeting="新年快乐，博士，你可以好好休息了。"
+            elif self.Festival=="圣诞":
+                self.FestivalGreeting="圣诞快乐，博士。"
+            elif self.Festival=="劳动节":
+                self.FestivalGreeting="劳动节快乐,博士。"
+            elif self.Festival=="国庆节":
+                self.FestivalGreeting="国庆节快乐，博士。"
+        else:
+            self.FestivalGreeting=None
+        if self.FestivalGreeting==None and self.To_Weather==None:
+            self.Greeting="今天是我值日，如果有需要请随时叫我。"
+        elif self.FestivalGreeting==None and self.To_Weather!=None:
+            if self.To_Weather=="R":
+                self.Greeting="今天是我值日，如果有需要请随时叫我。还有，今天可能有雨，出门记得带伞。"
+            elif self.To_Weather=="S":
+                self.Greeting="今天是我值日，如果有需要请随时叫我。还有，今天可能有雪，出门记得多穿些衣服。"
+        elif self.FestivalGreeting!=None and self.To_Weather==None:
+            self.Greeting=self.FestivalGreeting
+        elif self.FestivalGreeting!=None and self.To_Weather!=None:
+            if self.To_Weather=="R":
+                self.Greeting=self.FestivalGreeting+"还有，今天可能有雨，出门记得带伞。"
+            else:self.Greeting=self.FestivalGreeting+"还有，今天可能有雪，出门记得多穿些衣服。"
+        else:...
+        if self.Birth and self.To_Weather!=None:
+            if self.To_Weather=="R":
+                self.Greeting="生日快乐，博士。还有，今天可能有雨，出门记得带伞。"
+            if self.To_Weather=="S":
+                self.Greeting="生日快乐，博士。还有，今天可能有雪，出门记得多穿些衣服。"
+        elif self.Birth and self.To_Weather==None:
+            self.Greeting="生日快乐，博士。"
+        
+        self.SelfTalk={'晴': '还算不错的日子，偶尔也需要些好天气。', '多云': '这种程度的天气不至于使人懒惰，请回去完成你的工作。','阴': '这种程度的天气不至于使人懒惰，请回去完成你的工作。', '雨': '无碍，继续前进。','中雨':'无碍，继续前进。', '大雨': '这场雨,会给于某处地区的人们愦蹭,亦或是带来毁灭,我们仍需谨慎。', '暴雨': '通知所有离岛干员返回舰内,就地停靠。','特大暴雨':'通知所有离岛干员返回舰内,就地停靠。', '冻雨': '突发降温,不利于伤员的恢复,嘉维尔,去开启保温装置。', '阵雨': '继续前进吧,这场雨,不会持续太长时间', '雷阵雨': '雷声么...阿米娅已纪成长了,说不定年纪较小一点的干员需要博士的故事呢。', '雨夹雪': '融化的雪花又重新凝固而形成的天气......可露希尔，注意好罗德岛的数值指标。', '雪阵雨伴有冰雹': '很差劲的天气，但也算少见，你的运气还真不错。', '小雪': '继续前进吧，与乌萨斯和谢拉格相比，这算不了什么。','中雪': '继续前进吧，与乌萨斯和谢拉格相比，这算不了什么。','大雪': '继续前进吧，与乌萨斯和谢拉格相比，这算不了什么。', '暴雪': '大雪会掩埋一切，战死的士兵 、贫苦的百姓不会留下痕迹，这片大地上无数次演驿着这样的情景，剥夺生的希望,留下死的绝望。', '阵雪': '不会持续太长时间的， 走吧。', '强沙尘暴': '通知周边离岛干员回舰，封闭所有窗口，医疗干员全体待命。', '扬沙': '不建议外出，源石粉尘对你不会有利。', '浮尘': '空气中有微量源石颗粒，可露希尔，注意净化系统的工作情况。', '雾': '浓雾能隐藏真相，但我想你能看透它。'}
+        if self.WeatherData["Weather"] in self.SelfTalk.keys():
+            self.SelfTalk=self.SelfTalk[self.WeatherData["Weather"]]
 
     @JOverride
     def render(self):
+        if self.Greeting!=None:
+            self.SoapSpawn(self.Greeting,int(len(self.Greeting)/2),None)
+            self.Greeting=None
         self.Time=int(strftime("%H%M%S"))
         #Input_ProcessorF=Input_Processor()
         self.skeleton.setScaleX(self.Speed)
         self.Rand=randint(0,10000)
+        self.TalkRand=randint(0,2147483647)
         self.Soapon=FindWindow(None,"Soap")
 
         if self.PygameRunning!="Un" and self.PygameScreen==None:

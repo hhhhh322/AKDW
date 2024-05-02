@@ -2,6 +2,7 @@
     "Weather":{
         "City": "东莞",
         "RemindTime":"F"
-    }
+    },
+    "Birth":"0524"
     
 }
