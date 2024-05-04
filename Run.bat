@@ -1,1 +1,1 @@
-python Pet.py Kalsits build_char_003_kalts.atlas build_char_003_kalts.json
+runtime\python\python.exe Pet.pyw Kalsits build_char_003_kalts.atlas build_char_003_kalts.json
